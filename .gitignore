@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtualenv
+.venv/
+
+# Environment variables
+.env
+.env.*
+
+# Alembic
+alembic.ini
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
