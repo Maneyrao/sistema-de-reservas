@@ -1,8 +1,6 @@
 from datetime import time
 from sqlalchemy import select
-
 from database.session import SessionLocal
-
 from models.business import Business
 from models.staff import Staff
 from models.service import Service
@@ -27,51 +25,62 @@ def run_seed():
     with SessionLocal() as session:
         with session.begin():
 
-            #Business
+            # -----------------
+            # BUSINESS
+            # -----------------
             business = get_or_create(
                 session,
                 Business,
-                filters={"slug": "amsterdam"},
+                filters={"slug": "club-amsterdam"},
                 defaults={
-                    "name": "Amsterdam Barbería",
+                    "name": "Club Amsterdam",
                     "timezone": "America/Argentina/Buenos_Aires",
                 },
             )
 
-            #Staff
+            # -----------------
+            # STAFF
+            # -----------------
             staff = get_or_create(
                 session,
                 Staff,
                 filters={
                     "business_id": business.id,
-                    "name": "Matías",
+                    "slug": "mati",
+                },
+                defaults={
+                    "name": "Matías Damonte",
+                    "active": True,
                 },
             )
 
-            #Services
+            # -----------------
+            # SERVICES
+            # -----------------
             services_data = [
-                ("Corte", 45),
-                ("Barba", 30),
-                ("Corte + Barba", 45),
+                {"name": "Corte", "slug": "corte", "duration": 45},
+                {"name": "Barba", "slug": "barba", "duration": 30},
+                {"name": "Corte + Barba", "slug": "corte-barba", "duration": 45},
             ]
 
-            for name, duration in services_data:
+            for service in services_data:
                 get_or_create(
                     session,
                     Service,
                     filters={
                         "business_id": business.id,
-                        "name": name,
+                        "slug": service["slug"],
                     },
                     defaults={
-                        "duration_minutes": duration,
+                        "name": service["name"],
+                        "duration_minutes": service["duration"],
                         "active": True,
                     },
                 )
 
-            # Availability Rules
-            # Convención weekday: 0=Lunes ... 6=Domingo
-
+            # -----------------
+            # AVAILABILITY RULES
+            # -----------------
             availability_rules = []
 
             # Martes a Jueves → 10:00–20:00
@@ -106,7 +115,7 @@ def run_seed():
                     },
                 )
 
-        print("Seed ejecutado correctamente")
+        print("✅ Seed ejecutado correctamente")
 
 
 if __name__ == "__main__":

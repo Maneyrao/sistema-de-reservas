@@ -1,8 +1,14 @@
-from sqlalchemy import ForeignKey, String, Enum, DateTime, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
-from database.base import Base
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    String,
+    Enum,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 import enum
+
+from database.base import Base
 
 
 class BookingStatus(enum.Enum):
@@ -12,24 +18,24 @@ class BookingStatus(enum.Enum):
 
 class Booking(Base):
     __tablename__ = "booking"
-    __table_args__ = (
-        UniqueConstraint("staff_id", "start_datetime"),
-    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    business_id: Mapped[int] = mapped_column(ForeignKey("business.id"), nullable=False)
-    staff_id: Mapped[int] = mapped_column(ForeignKey("staff.id"), nullable=False)
-    service_id: Mapped[int] = mapped_column(ForeignKey("service.id"), nullable=False)
-    customer_id: Mapped[int] = mapped_column(ForeignKey("customer.id"), nullable=False)
+    business_id: Mapped[int] = mapped_column(ForeignKey("business.id"))
+    staff_id: Mapped[int] = mapped_column(ForeignKey("staff.id"))
+    service_id: Mapped[int] = mapped_column(ForeignKey("service.id"))
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customer.id"))
 
-    start_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    end_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    start_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    end_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
-    status: Mapped[BookingStatus] = mapped_column(
-        Enum(BookingStatus),
-        default=BookingStatus.confirmed,
-        nullable=False
+    status: Mapped[BookingStatus] = mapped_column(Enum(BookingStatus))
+    public_token: Mapped[str] = mapped_column(String, unique=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow
     )
 
-    public_token: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    business = relationship("Business", back_populates="bookings")
+    staff = relationship("Staff", back_populates="bookings")
+    service = relationship("Service", back_populates="bookings")
+    customer = relationship("Customer", back_populates="bookings")

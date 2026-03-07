@@ -1,13 +1,15 @@
-from sqlalchemy import ForeignKey, Integer, Time
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Column, Integer, Time, ForeignKey
+from sqlalchemy.orm import relationship
 from database.base import Base
 
 
 class AvailabilityRule(Base):
-    __tablename__ = "availability"
+    __tablename__ = "availability_rule"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    staff_id: Mapped[int] = mapped_column(ForeignKey("staff.id"), nullable=False)
-    weekday: Mapped[int] = mapped_column(Integer, nullable=False)  # 0=Lunes
-    start_time: Mapped[str] = mapped_column(Time, nullable=False)
-    end_time: Mapped[str] = mapped_column(Time, nullable=False)
+    id = Column(Integer, primary_key=True)
+    staff_id = Column(Integer, ForeignKey("staff.id"), nullable=False)
+    weekday = Column(Integer, nullable=False)  # 0=lunes ... 6=domingo
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+
+    staff = relationship("Staff", back_populates="availability_rules")

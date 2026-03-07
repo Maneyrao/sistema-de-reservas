@@ -1,16 +1,21 @@
-from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
-from database.base import Base
+from sqlalchemy import String, DateTime
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
+
+from database.base import Base
 
 
 class Business(Base):
     __tablename__ = "business"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
-    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    #el slug lo que hace, es darle un valor único a cada negocio. Por ejemplo, en este caso
-    #se habla que es amsterdam el negocio para el que hacemos el sistema de reservas.   
-    timezone: Mapped[str] = mapped_column(String(50), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    slug: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    timezone: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+
+    staff = relationship("Staff", back_populates="business")
+    services = relationship("Service", back_populates="business")
+    bookings = relationship("Booking", back_populates="business")

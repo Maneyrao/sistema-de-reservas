@@ -1,11 +1,12 @@
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models.availability import AvailabilityRule
 from models.service import Service
+from models.staff import Staff
 from models.booking import Booking, BookingStatus
 
 
@@ -22,62 +23,91 @@ def _overlaps(start_a, end_a, start_b, end_b) -> bool:
 
 def get_available_slots(
     session: Session,
-    staff_id: int,
-    service_id: int,
+    business_id: int,
+    service_slug: str,
     date_from: date,
     date_to: date,
+    staff_slug: str | None = None,
 ) -> list[dict]:
     """
-    Devuelve una lista de slots disponibles para un staff y servicio
-    en un rango de fechas.
+    Devuelve slots disponibles para un negocio y servicio.
+    Si staff_slug es None, devuelve disponibilidad general.
     """
 
+    # 1️⃣ Resolver servicio (boundary multi-tenant)
     service = session.execute(
-        select(Service).where(Service.id == service_id)
-    ).scalar_one()
+        select(Service).where(
+            Service.slug == service_slug,
+            Service.business_id == business_id,
+            Service.active.is_(True),
+        )
+    ).scalar_one_or_none()
+
+    if not service:
+        raise ValueError("Service not found in this business")
 
     duration = timedelta(minutes=service.duration_minutes)
     step = timedelta(minutes=STEP_MINUTES)
 
-    # Usamos set para evitar duplicados (rules superpuestas)
+    # 2️⃣ Resolver staff opcional
+    staff: Staff | None = None
+    if staff_slug:
+        staff = session.execute(
+            select(Staff).where(
+                Staff.slug == staff_slug,
+                Staff.business_id == business_id,
+                Staff.active.is_(True),
+            )
+        ).scalar_one_or_none()
+
+        if not staff:
+            raise ValueError("Staff not found in this business")
+
+    # 3️⃣ Obtener reglas de disponibilidad
+    # AvailabilityRule NO tiene business_id → se filtra vía Staff
+    rules_stmt = (
+        select(AvailabilityRule)
+        .join(Staff, AvailabilityRule.staff_id == Staff.id)
+        .where(Staff.business_id == business_id)
+    )
+
+    if staff:
+        rules_stmt = rules_stmt.where(AvailabilityRule.staff_id == staff.id)
+
+    rules = session.execute(rules_stmt).scalars().all()
+
+    if not rules:
+        return []
+
     slots_set: set[tuple[datetime, datetime]] = set()
 
     current_date = date_from
     while current_date <= date_to:
-        weekday = current_date.weekday()  # 0 = lunes
+        weekday = current_date.weekday()
+        day_rules = [r for r in rules if r.weekday == weekday]
 
-        rules = session.execute(
-            select(AvailabilityRule).where(
-                and_(
-                    AvailabilityRule.staff_id == staff_id,
-                    AvailabilityRule.weekday == weekday,
-                )
-            )
-        ).scalars().all()
-
-        if not rules:
+        if not day_rules:
             current_date += timedelta(days=1)
             continue
 
-        day_start = datetime.combine(
-            current_date, time.min, tzinfo=BUSINESS_TZ
-        )
-        day_end = datetime.combine(
-            current_date, time.max, tzinfo=BUSINESS_TZ
+        day_start = datetime.combine(current_date, time.min, tzinfo=BUSINESS_TZ)
+        day_end = datetime.combine(current_date, time.max, tzinfo=BUSINESS_TZ)
+
+        # 4️⃣ Bookings confirmados del día
+        bookings_stmt = select(Booking).where(
+            Booking.business_id == business_id,
+            Booking.status == BookingStatus.confirmed,
+            Booking.start_datetime < day_end,
+            Booking.end_datetime > day_start,
         )
 
-        bookings = session.execute(
-            select(Booking).where(
-                and_(
-                    Booking.staff_id == staff_id,
-                    Booking.status == BookingStatus.confirmed,
-                    Booking.start_datetime < day_end,
-                    Booking.end_datetime > day_start,
-                )
-            )
-        ).scalars().all()
+        if staff:
+            bookings_stmt = bookings_stmt.where(Booking.staff_id == staff.id)
 
-        for rule in rules:
+        bookings = session.execute(bookings_stmt).scalars().all()
+
+        # 5️⃣ Generación de slots
+        for rule in day_rules:
             window_start = datetime.combine(
                 current_date, rule.start_time, tzinfo=BUSINESS_TZ
             )
@@ -85,7 +115,6 @@ def get_available_slots(
                 current_date, rule.end_time, tzinfo=BUSINESS_TZ
             )
 
-            # Optimización: si el servicio no entra, skip
             if window_end - window_start < duration:
                 continue
 
@@ -94,25 +123,23 @@ def get_available_slots(
                 candidate_start = t
                 candidate_end = t + duration
 
-                conflict = False
-                for booking in bookings:
-                    if _overlaps(
+                if any(
+                    _overlaps(
                         candidate_start,
                         candidate_end,
-                        booking.start_datetime,
-                        booking.end_datetime,
-                    ):
-                        conflict = True
-                        break
+                        b.start_datetime,
+                        b.end_datetime,
+                    )
+                    for b in bookings
+                ):
+                    t += step
+                    continue
 
-                if not conflict:
-                    slots_set.add((candidate_start, candidate_end))
-
+                slots_set.add((candidate_start, candidate_end))
                 t += step
 
         current_date += timedelta(days=1)
 
-    # Normalizamos salida ordenada
     return [
         {"start": start, "end": end}
         for start, end in sorted(slots_set)

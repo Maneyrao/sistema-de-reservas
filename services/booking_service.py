@@ -1,11 +1,21 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, time
 from uuid import uuid4
-from datetime import datetime, time
+from zoneinfo import ZoneInfo
+
 from sqlalchemy import select, and_
 from sqlalchemy.orm import Session
+
 from models.booking import Booking, BookingStatus
 from models.service import Service
+from models.staff import Staff
 
+
+BUSINESS_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
+
+
+# --------------------
+# Exceptions
+# --------------------
 
 class SlotNotAvailable(Exception):
     pass
@@ -19,9 +29,20 @@ class InvalidService(Exception):
     pass
 
 
+# --------------------
+# Utils
+# --------------------
+
 def _overlaps(start_a, end_a, start_b, end_b) -> bool:
+    """
+    Intervalos semiabiertos: [start, end)
+    """
     return start_a < end_b and start_b < end_a
 
+
+# --------------------
+# Core booking logic
+# --------------------
 
 def _create_booking_internal(
     session: Session,
@@ -30,25 +51,37 @@ def _create_booking_internal(
     staff_id: int,
     service_id: int,
     customer_id: int,
-    start_datetime,
+    start_datetime: datetime,
 ) -> Booking:
-    # 1) Validar que el servicio exista y pertenezca al business
+    # 1️⃣ Validar servicio (multi-tenant)
     service = session.execute(
         select(Service).where(
-            and_(
-                Service.id == service_id,
-                Service.business_id == business_id,
-            )
+            Service.id == service_id,
+            Service.business_id == business_id,
+            Service.active.is_(True),
         )
     ).scalar_one_or_none()
 
     if not service:
         raise InvalidService("El servicio no existe o no pertenece al negocio")
 
+    # 2️⃣ Validar staff (multi-tenant)
+    staff = session.execute(
+        select(Staff).where(
+            Staff.id == staff_id,
+            Staff.business_id == business_id,
+            Staff.active.is_(True),
+        )
+    ).scalar_one_or_none()
+
+    if not staff:
+        raise InvalidService("El staff no existe o no pertenece al negocio")
+
+    # 3️⃣ Calcular duración
     duration = timedelta(minutes=service.duration_minutes)
     end_datetime = start_datetime + duration
 
-    # 2) Lock de posibles conflictos (concurrencia real)
+    # 4️⃣ Lock de conflictos (concurrencia real)
     conflicting_bookings = session.execute(
         select(Booking)
         .where(
@@ -66,6 +99,7 @@ def _create_booking_internal(
         if _overlaps(start_datetime, end_datetime, b.start_datetime, b.end_datetime):
             raise SlotNotAvailable("El horario ya no está disponible")
 
+    # 5️⃣ Crear booking
     booking = Booking(
         business_id=business_id,
         staff_id=staff_id,
@@ -81,6 +115,10 @@ def _create_booking_internal(
     return booking
 
 
+# --------------------
+# Public API
+# --------------------
+
 def create_booking(
     session: Session,
     *,
@@ -88,17 +126,20 @@ def create_booking(
     staff_id: int,
     service_id: int,
     customer_id: int,
-    start_datetime,
+    start_datetime: datetime,
 ) -> Booking:
-    with session.begin():
-        return _create_booking_internal(
-            session,
-            business_id=business_id,
-            staff_id=staff_id,
-            service_id=service_id,
-            customer_id=customer_id,
-            start_datetime=start_datetime,
-        )
+    """
+    Crea una reserva.
+    Asume que la transacción ya está abierta en el router.
+    """
+    return _create_booking_internal(
+        session=session,
+        business_id=business_id,
+        staff_id=staff_id,
+        service_id=service_id,
+        customer_id=customer_id,
+        start_datetime=start_datetime,
+    )
 
 
 def cancel_booking(
@@ -106,50 +147,55 @@ def cancel_booking(
     *,
     booking_id: int,
 ) -> Booking:
-    with session.begin():
-        booking = session.execute(
-            select(Booking).where(Booking.id == booking_id)
-        ).scalar_one_or_none()
+    """
+    Cancela una reserva existente.
+    """
+    booking = session.execute(
+        select(Booking).where(Booking.id == booking_id)
+    ).scalar_one_or_none()
 
-        if not booking:
-            raise BookingNotFound("Booking no encontrado")
+    if not booking:
+        raise BookingNotFound("Booking no encontrado")
 
-        if booking.status == BookingStatus.canceled:
-            return booking  # idempotente
+    if booking.status == BookingStatus.canceled:
+        return booking  # idempotente
 
-        booking.status = BookingStatus.canceled
-        return booking
+    booking.status = BookingStatus.canceled
+    return booking
 
 
 def reschedule_booking(
     session: Session,
     *,
     booking_id: int,
-    new_start_datetime,
+    new_start_datetime: datetime,
 ) -> Booking:
-    with session.begin():
-        booking = session.execute(
-            select(Booking).where(Booking.id == booking_id)
-        ).scalar_one_or_none()
+    """
+    Reprograma una reserva:
+    - Cancela la actual
+    - Crea una nueva en la misma transacción
+    """
+    booking = session.execute(
+        select(Booking).where(Booking.id == booking_id)
+    ).scalar_one_or_none()
 
-        if not booking:
-            raise BookingNotFound("Booking no encontrado")
+    if not booking:
+        raise BookingNotFound("Booking no encontrado")
 
-        # Cancelamos el booking actual (historial)
-        booking.status = BookingStatus.canceled
+    # Cancelamos el booking actual (historial)
+    booking.status = BookingStatus.canceled
 
-        # Creamos el nuevo dentro de LA MISMA transacción
-        new_booking = _create_booking_internal(
-            session=session,
-            business_id=booking.business_id,
-            staff_id=booking.staff_id,
-            service_id=booking.service_id,
-            customer_id=booking.customer_id,
-            start_datetime=new_start_datetime,
-        )
+    # Creamos el nuevo (misma transacción)
+    return _create_booking_internal(
+        session=session,
+        business_id=booking.business_id,
+        staff_id=booking.staff_id,
+        service_id=booking.service_id,
+        customer_id=booking.customer_id,
+        start_datetime=new_start_datetime,
+    )
 
-        return new_booking
-    
+
 def get_business_bookings_by_date(
     session: Session,
     *,
@@ -157,8 +203,11 @@ def get_business_bookings_by_date(
     day,
     staff_id: int | None = None,
 ):
-    day_start = datetime.combine(day, time.min)
-    day_end = datetime.combine(day, time.max)
+    """
+    Devuelve bookings confirmados de un negocio en un día específico.
+    """
+    day_start = datetime.combine(day, time.min, tzinfo=BUSINESS_TZ)
+    day_end = datetime.combine(day, time.max, tzinfo=BUSINESS_TZ)
 
     conditions = [
         Booking.business_id == business_id,
@@ -170,10 +219,8 @@ def get_business_bookings_by_date(
     if staff_id is not None:
         conditions.append(Booking.staff_id == staff_id)
 
-    bookings = session.execute(
+    return session.execute(
         select(Booking)
         .where(and_(*conditions))
         .order_by(Booking.start_datetime)
     ).scalars().all()
-
-    return bookings

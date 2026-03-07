@@ -22,6 +22,10 @@ from models.staff import Staff
 from models.availability import AvailabilityRule
 
 
+
+target_metadata = Base.metadata
+
+
 target_metadata = Base.metadata
 
 def run_migrations_offline():
