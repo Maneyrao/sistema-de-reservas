@@ -1,5 +1,6 @@
 "use client"
 
+import { ArrowRight } from "lucide-react"
 import { BrandLoader } from "@/components/brand-loader"
 import { useBooking } from "@/components/booking/booking-context"
 import { slotLabel } from "@/components/booking/utils"
@@ -19,7 +20,7 @@ function groupSlotsByPeriod(slots: { start: string }[]) {
 }
 
 export function TimeSlotPicker() {
-  const { slots, slot, setSlot, loadingSlots, slotError, date } = useBooking()
+  const { slots, slot, setSlot, loadingSlots, slotError, date, setDate, days } = useBooking()
 
   if (!date) return null
 
@@ -35,13 +36,58 @@ export function TimeSlotPicker() {
         {loadingSlots ? (
           <BrandLoader fullscreen={false} message="Consultando agenda..." className="bg-transparent py-4" />
         ) : slotError ? (
-          <p className="py-2 text-center text-sm text-red-300">{slotError}</p>
+          <div className="py-2 text-center">
+            <p className="text-sm text-red-300">{slotError}</p>
+            <button
+              type="button"
+              onClick={() => { setDate(date) }}
+              className="mt-2 text-xs text-amber-500 hover:text-amber-400 underline"
+            >
+              Reintentar
+            </button>
+          </div>
         ) : slots.length === 0 ? (
-          <p className="py-2 text-center text-sm text-zinc-400">No hay turnos disponibles para este día.</p>
+          <EmptySlots days={days} currentDate={date} setDate={setDate} />
         ) : (
           <SlotGroups slots={slots} slot={slot} setSlot={setSlot} />
         )}
       </div>
+    </div>
+  )
+}
+
+function EmptySlots({
+  days,
+  currentDate,
+  setDate,
+}: {
+  days: { key: string; value: Date }[]
+  currentDate: string
+  setDate: (d: string) => void
+}) {
+  const nextDaysWithDate = days.filter((d) => d.key > currentDate).slice(0, 3)
+
+  return (
+    <div className="space-y-3 py-1">
+      <p className="text-center text-sm text-zinc-400">Sin turnos disponibles para este día.</p>
+      {nextDaysWithDate.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-center text-[10px] uppercase tracking-widest text-zinc-600">Probá con</p>
+          <div className="flex justify-center gap-2">
+            {nextDaysWithDate.map((d) => (
+              <button
+                key={d.key}
+                type="button"
+                onClick={() => setDate(d.key)}
+                className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-amber-500/40 hover:text-amber-400"
+              >
+                {d.value.toLocaleDateString("es-AR", { weekday: "short", day: "numeric" })}
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -56,13 +102,11 @@ function SlotGroups({
   setSlot: (s: { start: string; end: string } | null) => void
 }) {
   const { morning, afternoon, evening } = groupSlotsByPeriod(slots)
-  let globalIndex = 0
+  let offset = 0
 
-  const morningStart = globalIndex
-  globalIndex += morning.length
-  const afternoonStart = globalIndex
-  globalIndex += afternoon.length
-  const eveningStart = globalIndex
+  const morningStart = offset; offset += morning.length
+  const afternoonStart = offset; offset += afternoon.length
+  const eveningStart = offset
 
   return (
     <div className="space-y-4">
@@ -74,12 +118,7 @@ function SlotGroups({
 }
 
 function SlotGroup({
-  label,
-  emoji,
-  items,
-  selected,
-  onSelect,
-  startIndex,
+  label, emoji, items, selected, onSelect, startIndex,
 }: {
   label: string
   emoji: string
@@ -97,7 +136,9 @@ function SlotGroup({
         {items.map((item, index) => (
           <button
             key={item.start}
+            type="button"
             onClick={() => onSelect(item)}
+            aria-pressed={selected?.start === item.start}
             style={{ animationDelay: `${(startIndex + index) * 35}ms` }}
             className={cn(
               "animate-in fade-in zoom-in-90 rounded-xl border px-3.5 py-2 text-sm font-medium transition-all duration-150 fill-mode-both",

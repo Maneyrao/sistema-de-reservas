@@ -9,7 +9,6 @@ export type CustomerForm = { firstName: string; lastName: string; phone: string;
 export const steps = ["Barbero y servicio", "Fecha y hora", "Tus datos"]
 
 interface BookingContextValue {
-  // Data
   catalog: PublicCatalog | null
   selectedStaffSlug: string | null
   selectedServiceSlug: string | null
@@ -17,7 +16,6 @@ interface BookingContextValue {
   slot: AvailabilitySlot | null
   slots: AvailabilitySlot[]
   customer: CustomerForm
-  // Loading / error states
   loadingCatalog: boolean
   loadingSlots: boolean
   submitting: boolean
@@ -25,26 +23,25 @@ interface BookingContextValue {
   slotError: string | null
   submitError: string | null
   confirmedBooking: BookingResponse | null
-  // Setters
   setSelectedStaffSlug: (slug: string | null) => void
   setSelectedServiceSlug: (slug: string | null) => void
   setDate: (date: string | null) => void
   setSlot: (slot: AvailabilitySlot | null) => void
   setCustomer: React.Dispatch<React.SetStateAction<CustomerForm>>
-  // Derived values
   selectedStaff: PublicCatalog["staff"][number] | null
   availableServices: PublicCatalog["services"]
   selectedService: PublicCatalog["services"][number] | null
   days: { key: string; value: Date }[]
   customerValid: boolean
   mapEmbedUrl: string | null
-  // Step navigation
   step: number
   setStep: React.Dispatch<React.SetStateAction<number>>
   goNext: () => void
   goBack: () => void
   canContinue: () => boolean
+  getContinueHint: () => string | null
   handleConfirm: () => Promise<void>
+  resetBooking: () => void
 }
 
 const BookingContext = createContext<BookingContextValue | null>(null)
@@ -73,10 +70,15 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   const [confirmedBooking, setConfirmedBooking] = useState<BookingResponse | null>(null)
 
   const selectedStaff = catalog?.staff.find((item) => item.slug === selectedStaffSlug) ?? null
-  const availableServices = selectedStaff ? (catalog?.services ?? []).filter((item) => selectedStaff.service_slugs.includes(item.slug)) : []
+  const availableServices = selectedStaff
+    ? (catalog?.services ?? []).filter((item) => selectedStaff.service_slugs.includes(item.slug))
+    : []
   const selectedService = availableServices.find((item) => item.slug === selectedServiceSlug) ?? null
   const days = nextDays(Math.min(catalog?.booking_rules.max_advance_days ?? 14, 15))
-  const customerValid = customer.firstName.trim().length >= 2 && customer.lastName.trim().length >= 2 && customer.phone.trim().replace(/\D/g, "").length >= 8
+  const customerValid =
+    customer.firstName.trim().length >= 2 &&
+    customer.lastName.trim().length >= 2 &&
+    customer.phone.trim().replace(/\D/g, "").length >= 8
   const mapEmbedUrl = buildMapEmbedUrl(catalog?.business.maps_url ?? null)
 
   useEffect(() => {
@@ -97,15 +99,15 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       }
     }
     void loadCatalog()
-    return () => {
-      active = false
-    }
+    return () => { active = false }
   }, [])
 
   useEffect(() => {
     if (!catalog) return
     const currentStaff = catalog.staff.find((item) => item.slug === selectedStaffSlug) ?? null
-    const offeredServices = currentStaff ? catalog.services.filter((item) => currentStaff.service_slugs.includes(item.slug)) : []
+    const offeredServices = currentStaff
+      ? catalog.services.filter((item) => currentStaff.service_slugs.includes(item.slug))
+      : []
     if (!selectedServiceSlug || !offeredServices.some((item) => item.slug === selectedServiceSlug)) {
       setSelectedServiceSlug(offeredServices[0]?.slug ?? null)
       setSlot(null)
@@ -122,7 +124,11 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       setLoadingSlots(true)
       setSlotError(null)
       try {
-        const response = await getAvailability({ serviceSlug: selectedService!.slug, staffSlug: selectedStaff!.slug, date: date! })
+        const response = await getAvailability({
+          serviceSlug: selectedService!.slug,
+          staffSlug: selectedStaff!.slug,
+          date: date!,
+        })
         if (!active) return
         setSlots(response)
         if (slot && !response.some((item) => item.start === slot.start)) setSlot(null)
@@ -136,9 +142,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       }
     }
     void loadSlots()
-    return () => {
-      active = false
-    }
+    return () => { active = false }
   }, [date, selectedService?.slug, selectedStaff?.slug, slot])
 
   function canContinue() {
@@ -147,12 +151,35 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     return customerValid
   }
 
-  function goNext() {
-    setStep((value) => value + 1)
+  function getContinueHint(): string | null {
+    if (canContinue()) return null
+    if (step === 0) {
+      if (!selectedStaff) return "Seleccioná un barbero para continuar"
+      if (!selectedService) return "Seleccioná un servicio para continuar"
+    }
+    if (step === 1) {
+      if (!date) return "Elegí una fecha para ver horarios"
+      if (!slot) return "Seleccioná un horario disponible"
+    }
+    if (step === 2) {
+      if (customer.firstName.trim().length < 2) return "Ingresá tu nombre (mínimo 2 caracteres)"
+      if (customer.lastName.trim().length < 2) return "Ingresá tu apellido"
+      if (customer.phone.trim().replace(/\D/g, "").length < 8) return "Ingresá un teléfono válido"
+    }
+    return null
   }
 
-  function goBack() {
-    setStep((value) => Math.max(0, value - 1))
+  function goNext() { setStep((v) => v + 1) }
+  function goBack() { setStep((v) => Math.max(0, v - 1)) }
+
+  function resetBooking() {
+    setStep(0)
+    setDate(null)
+    setSlot(null)
+    setSlots([])
+    setSubmitError(null)
+    setConfirmedBooking(null)
+    setCustomer({ firstName: "", lastName: "", phone: "", email: "", notes: "" })
   }
 
   async function handleConfirm() {
@@ -165,7 +192,12 @@ export function BookingProvider({ children }: { children: ReactNode }) {
         staff_slug: selectedStaff.slug,
         date,
         time: slot.start.slice(11, 19),
-        customer: { first_name: customer.firstName.trim(), last_name: customer.lastName.trim(), phone: customer.phone.trim(), ...(customer.email.trim() ? { email: customer.email.trim() } : {}) },
+        customer: {
+          first_name: customer.firstName.trim(),
+          last_name: customer.lastName.trim(),
+          phone: customer.phone.trim(),
+          ...(customer.email.trim() ? { email: customer.email.trim() } : {}),
+        },
         ...(customer.notes.trim() ? { notes: customer.notes.trim() } : {}),
       })
       setConfirmedBooking(response)
@@ -179,37 +211,11 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   return (
     <BookingContext.Provider
       value={{
-        catalog,
-        selectedStaffSlug,
-        selectedServiceSlug,
-        date,
-        slot,
-        slots,
-        customer,
-        loadingCatalog,
-        loadingSlots,
-        submitting,
-        catalogError,
-        slotError,
-        submitError,
-        confirmedBooking,
-        setSelectedStaffSlug,
-        setSelectedServiceSlug,
-        setDate,
-        setSlot,
-        setCustomer,
-        selectedStaff,
-        availableServices,
-        selectedService,
-        days,
-        customerValid,
-        mapEmbedUrl,
-        step,
-        setStep,
-        goNext,
-        goBack,
-        canContinue,
-        handleConfirm,
+        catalog, selectedStaffSlug, selectedServiceSlug, date, slot, slots, customer,
+        loadingCatalog, loadingSlots, submitting, catalogError, slotError, submitError, confirmedBooking,
+        setSelectedStaffSlug, setSelectedServiceSlug, setDate, setSlot, setCustomer,
+        selectedStaff, availableServices, selectedService, days, customerValid, mapEmbedUrl,
+        step, setStep, goNext, goBack, canContinue, getContinueHint, handleConfirm, resetBooking,
       }}
     >
       {children}
