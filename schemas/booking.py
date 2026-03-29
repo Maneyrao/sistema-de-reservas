@@ -1,13 +1,31 @@
 # schemas/booking.py
 
-from pydantic import BaseModel, Field, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
 from datetime import date, time, datetime,timedelta
 from typing import Optional, Literal
 
 class CustomerInfo(BaseModel):
-    name: str = Field(..., min_length=2, max_length=100)
-    email: EmailStr
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    first_name: str = Field(..., min_length=2, max_length=80)
+    last_name: str = Field(..., min_length=2, max_length=80)
     phone: str = Field(..., pattern=r'^\+?[0-9\s\-()]+$')
+    email: Optional[EmailStr] = None
+
+    @field_validator("first_name", "last_name")
+    def validate_non_blank_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 2:
+            raise ValueError("Name fields must contain at least 2 non-space characters")
+        return cleaned
+
+    @field_validator("phone")
+    def validate_phone_digits(cls, value: str) -> str:
+        cleaned = value.strip()
+        digits = "".join(ch for ch in cleaned if ch.isdigit())
+        if len(digits) < 8:
+            raise ValueError("Phone must contain at least 8 digits")
+        return cleaned
 
 class SlotInfo(BaseModel):
     date: date
@@ -61,7 +79,7 @@ class BookingCreate(BaseModel):
 
 class BookingResponse(BaseModel):
     code: str
-    status: Literal["pending", "confirmed", "cancelled", "completed", "no_show"]
+    status: Literal["pending", "confirmed", "canceled", "cancelled", "completed", "no_show"]
     business: BusinessInfo
     service: ServiceInfo
     staff: StaffInfo

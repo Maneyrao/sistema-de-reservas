@@ -8,25 +8,14 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column(
-        "customer",
-        sa.Column("email", sa.String(), nullable=True)
-    )
-
-    op.create_index(
-        "ix_customer_email",
-        "customer",
-        ["email"]
-    )
-
-    op.create_unique_constraint(
-        "uq_customer_email",
-        "customer",
-        ["email"]
-    )
+    with op.batch_alter_table("customer", schema=None) as batch_op:
+        batch_op.add_column(sa.Column("email", sa.String(), nullable=True))
+        batch_op.create_index("ix_customer_email", ["email"])
+        batch_op.create_unique_constraint("uq_customer_email", ["email"])
 
 
 def downgrade():
-    op.drop_constraint("uq_customer_email", "customer", type_="unique")
-    op.drop_index("ix_customer_email", table_name="customer")
-    op.drop_column("customer", "email")
+    with op.batch_alter_table("customer", schema=None) as batch_op:
+        batch_op.drop_constraint("uq_customer_email", type_="unique")
+        batch_op.drop_index("ix_customer_email")
+        batch_op.drop_column("email")

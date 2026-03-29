@@ -8,6 +8,10 @@ from models.service import Service
 from models.customer import Customer
 from models.availability import AvailabilityRule
 from models.booking import Booking, BookingStatus
+from models.staff_service import StaffService
+from models.admin_user import AdminUser
+from models.time_block import TimeBlock
+from models.audit_log import AuditLog
 
 __all__ = [
     "Base",
@@ -18,4 +22,8 @@ __all__ = [
     "AvailabilityRule",
     "Booking",
     "BookingStatus",
+    "StaffService",
+    "AdminUser",
+    "TimeBlock",
+    "AuditLog",
 ]

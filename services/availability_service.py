@@ -1,24 +1,16 @@
 from datetime import date, datetime, time, timedelta
-from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from models.availability import AvailabilityRule
+from models.booking import Booking, BookingStatus
 from models.service import Service
 from models.staff import Staff
-from models.booking import Booking, BookingStatus
-
-
-STEP_MINUTES = 15
-BUSINESS_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
-
-
-def _overlaps(start_a, end_a, start_b, end_b) -> bool:
-    """
-    Intervalos semiabiertos: [start, end)
-    """
-    return start_a < end_b and start_b < end_a
+from models.time_block import TimeBlock
+from services.booking_service import staff_offers_service
+from services.time_utils import STEP_MINUTES, overlaps
+from services.timezone_utils import get_business_tz, to_business_tz
 
 
 def get_available_slots(
@@ -33,6 +25,8 @@ def get_available_slots(
     Devuelve slots disponibles para un negocio y servicio.
     Si staff_slug es None, devuelve disponibilidad general.
     """
+
+    tz = get_business_tz(session, business_id)
 
     # 1️⃣ Resolver servicio (boundary multi-tenant)
     service = session.execute(
@@ -62,6 +56,12 @@ def get_available_slots(
 
         if not staff:
             raise ValueError("Staff not found in this business")
+        if not staff_offers_service(
+            session,
+            staff_id=staff.id,
+            service_id=service.id,
+        ):
+            raise ValueError("Staff does not offer this service")
 
     # 3️⃣ Obtener reglas de disponibilidad
     # AvailabilityRule NO tiene business_id → se filtra vía Staff
@@ -90,13 +90,13 @@ def get_available_slots(
             current_date += timedelta(days=1)
             continue
 
-        day_start = datetime.combine(current_date, time.min, tzinfo=BUSINESS_TZ)
-        day_end = datetime.combine(current_date, time.max, tzinfo=BUSINESS_TZ)
+        day_start = datetime.combine(current_date, time.min, tzinfo=tz)
+        day_end = datetime.combine(current_date, time.max, tzinfo=tz)
 
-        # 4️⃣ Bookings confirmados del día
+        # 4️⃣ Bookings activos del dia
         bookings_stmt = select(Booking).where(
             Booking.business_id == business_id,
-            Booking.status == BookingStatus.confirmed,
+            Booking.status.in_([BookingStatus.pending, BookingStatus.confirmed]),
             Booking.start_datetime < day_end,
             Booking.end_datetime > day_start,
         )
@@ -106,13 +106,24 @@ def get_available_slots(
 
         bookings = session.execute(bookings_stmt).scalars().all()
 
+        blocks_stmt = select(TimeBlock).where(
+            TimeBlock.business_id == business_id,
+            TimeBlock.start_datetime < day_end,
+            TimeBlock.end_datetime > day_start,
+        )
+        if staff:
+            blocks_stmt = blocks_stmt.where(
+                or_(TimeBlock.staff_id.is_(None), TimeBlock.staff_id == staff.id)
+            )
+        blocks = session.execute(blocks_stmt).scalars().all()
+
         # 5️⃣ Generación de slots
         for rule in day_rules:
             window_start = datetime.combine(
-                current_date, rule.start_time, tzinfo=BUSINESS_TZ
+                current_date, rule.start_time, tzinfo=tz
             )
             window_end = datetime.combine(
-                current_date, rule.end_time, tzinfo=BUSINESS_TZ
+                current_date, rule.end_time, tzinfo=tz
             )
 
             if window_end - window_start < duration:
@@ -124,13 +135,25 @@ def get_available_slots(
                 candidate_end = t + duration
 
                 if any(
-                    _overlaps(
+                    overlaps(
                         candidate_start,
                         candidate_end,
-                        b.start_datetime,
-                        b.end_datetime,
+                        to_business_tz(b.start_datetime, tz),
+                        to_business_tz(b.end_datetime, tz),
                     )
                     for b in bookings
+                ):
+                    t += step
+                    continue
+
+                if any(
+                    overlaps(
+                        candidate_start,
+                        candidate_end,
+                        to_business_tz(block.start_datetime, tz),
+                        to_business_tz(block.end_datetime, tz),
+                    )
+                    for block in blocks
                 ):
                     t += step
                     continue

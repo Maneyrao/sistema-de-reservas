@@ -1,12 +1,22 @@
-from sqlalchemy import String, DateTime
+from sqlalchemy import Index, String, DateTime, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database.base import Base
 
 
 class Customer(Base):
     __tablename__ = "customer"
+    __table_args__ = (
+        # Permite deduplicar por telefono real, pero deja convivir filas legacy con null/vacio.
+        Index(
+            "uq_customer_phone_not_empty",
+            "phone",
+            unique=True,
+            sqlite_where=text("phone IS NOT NULL AND phone != ''"),
+            postgresql_where=text("phone IS NOT NULL AND btrim(phone) <> ''"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
@@ -23,7 +33,7 @@ class Customer(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
     )
 
     bookings = relationship("Booking", back_populates="customer")

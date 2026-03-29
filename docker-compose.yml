@@ -1,0 +1,57 @@
+version: "3.9"
+
+# ============================================================
+# Sistema de Reservas Club Amsterdam — Docker Compose
+# ============================================================
+# Uso desarrollo:
+#   docker compose up --build
+#
+# La DB de producción debe configurarse en DATABASE_URL
+# (apuntando a un PostgreSQL externo o un servicio separado).
+
+services:
+  # ----------------------------------------------------------
+  # Backend FastAPI
+  # ----------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: booking-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./booking_local.db}
+      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
+      - ADMIN_JWT_EXPIRE_MINUTES=${ADMIN_JWT_EXPIRE_MINUTES:-720}
+      - CRON_SECRET=${CRON_SECRET}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+    volumes:
+      # SQLite en desarrollo — montar para persistir fuera del container
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ----------------------------------------------------------
+  # Frontend Next.js
+  # ----------------------------------------------------------
+  frontend:
+    build:
+      context: ./booking-frontend
+      dockerfile: Dockerfile
+    container_name: booking-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    depends_on:
+      backend:
+        condition: service_healthy

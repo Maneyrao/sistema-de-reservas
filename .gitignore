@@ -6,9 +6,10 @@ __pycache__/
 # Virtualenv
 .venv/
 
-# Environment variables
+# Environment variables — ignorar archivos con valores reales
 .env
 .env.*
+!.env.example
 
 # Alembic
 alembic.ini
@@ -19,3 +20,20 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local sqlite
+booking_local.db
+booking_local.db-shm
+booking_local.db-wal
+
+# Logs dir
+logs/
+
+# Next.js
+booking-frontend/.next/
+booking-frontend/node_modules/
+booking-frontend/.env*.local
+
+# Planes/análisis internos
+ANALISIS_Y_PLAN.md
+PLAN_EJECUCION_CLAUDE_CODE.md

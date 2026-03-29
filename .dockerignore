@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.env
+.env.*
+*.db
+
+# Tests
+tests/
+pytest.ini
+.pytest_cache/
+
+# Frontend (separate container)
+booking-frontend/
+
+# Dev artifacts
+.git/
+.gitignore
+*.log
+alembic.ini
+scripts/
+
+# Docs
+*.md
