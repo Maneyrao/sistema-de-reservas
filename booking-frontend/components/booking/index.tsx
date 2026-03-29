@@ -18,14 +18,28 @@ import { BookingConfirmation } from "@/components/booking/booking-confirmation"
 import { formatCurrency, initialsFromName, slotLabel } from "@/components/booking/utils"
 
 function AppHeader() {
+  const { setStep, setDate, setSlot } = useBooking()
+
+  function handleLogoClick() {
+    setStep(0)
+    setDate(null)
+    setSlot(null)
+  }
+
   return (
     <header className="border-b border-zinc-800/60 bg-zinc-950 py-10">
       <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-4">
-        <img
-          src="/club-amsterdam-monogram.svg"
-          alt="Club Amsterdam"
-          className="h-20 w-20 animate-in fade-in zoom-in-75 rounded-3xl border border-amber-500/20 bg-black/50 p-3 duration-700"
-        />
+        <button
+          onClick={handleLogoClick}
+          className="group transition-transform hover:scale-105 active:scale-95"
+          aria-label="Volver al inicio"
+        >
+          <img
+            src="/club-amsterdam-monogram.svg"
+            alt="Club Amsterdam"
+            className="h-20 w-20 animate-in fade-in zoom-in-75 rounded-3xl border border-amber-500/20 bg-black/50 p-3 duration-700 group-hover:border-amber-500/50 transition-colors"
+          />
+        </button>
         <h1 className="animate-in fade-in slide-in-from-bottom-3 font-display text-4xl uppercase tracking-widest text-zinc-50 duration-700 delay-150">
           Club Amsterdam
         </h1>
@@ -163,6 +177,16 @@ function BookingWidgetInner() {
             slideDir === "right" ? "slide-in-from-right-4" : "slide-in-from-left-4"
           )}
         >
+          {/* Back button inside card — only on steps 1+ */}
+          {step > 0 && (
+            <button
+              onClick={() => setStep((v) => v - 1)}
+              className="mb-4 flex items-center gap-1.5 text-xs text-zinc-500 transition-colors hover:text-amber-400 active:scale-95"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              {steps[step - 1]}
+            </button>
+          )}
           {step === 0 && (
             <div className="space-y-6">
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -196,15 +220,7 @@ function BookingWidgetInner() {
         </div>
 
         {/* Navigation */}
-        <div className="mt-4 flex animate-in fade-in slide-in-from-bottom-3 items-center justify-between gap-3 duration-500 delay-150">
-          <Button
-            variant="ghost"
-            onClick={() => setStep((v) => Math.max(0, v - 1))}
-            disabled={step === 0}
-            className="rounded-2xl border border-zinc-800 px-5 text-zinc-400 transition-all hover:border-zinc-600 hover:text-zinc-200 active:scale-95"
-          >
-            <ChevronLeft className="mr-1 h-4 w-4" />Volver
-          </Button>
+        <div className="mt-4 flex animate-in fade-in slide-in-from-bottom-3 items-center justify-end gap-3 duration-500 delay-150">
 
           {step < steps.length - 1 ? (
             <Button
