@@ -78,6 +78,11 @@
   --font-sans: var(--font-manrope);
   --font-display: var(--font-bebas);
   --font-mono: var(--font-manrope);
+  /* Brand gold — override Tailwind amber to match Club Amsterdam identity */
+  --color-amber-300: oklch(0.905 0.155 79);
+  --color-amber-400: oklch(0.855 0.175 79);
+  --color-amber-500: oklch(0.795 0.185 79);
+  --color-amber-600: oklch(0.720 0.195 79);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

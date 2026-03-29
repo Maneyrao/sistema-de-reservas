@@ -170,8 +170,8 @@ export function adminMe(token: string) {
   return adminRequest<AdminUser>("/admin/auth/me", { token })
 }
 
-export function listAdminBookings(token: string, params: { dateFrom: string; dateTo: string; status?: string[] }) {
-  return adminRequest<AdminBooking[]>("/admin/bookings", {
+export async function listAdminBookings(token: string, params: { dateFrom: string; dateTo: string; status?: string[] }): Promise<AdminBooking[]> {
+  const response = await adminRequest<{ items: AdminBooking[] } | AdminBooking[]>("/admin/bookings", {
     token,
     query: {
       date_from: params.dateFrom,
@@ -179,6 +179,7 @@ export function listAdminBookings(token: string, params: { dateFrom: string; dat
       status: params.status,
     },
   })
+  return Array.isArray(response) ? response : (response as { items: AdminBooking[] }).items ?? []
 }
 
 export function createAdminBooking(

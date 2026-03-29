@@ -14,8 +14,8 @@ export function CustomerForm() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="font-display text-3xl uppercase leading-none">Tus datos</h2>
-        <p className="mt-1 text-sm text-zinc-400">Solo lo necesario para registrar el turno.</p>
+        <h2 className="font-display text-3xl uppercase leading-none">¿A nombre de quién?</h2>
+        <p className="mt-1 text-sm text-zinc-400">Solo lo necesario para reservar tu silla.</p>
       </div>
 
       {/* Campos obligatorios */}

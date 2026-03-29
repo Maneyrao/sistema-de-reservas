@@ -1,12 +1,21 @@
 "use client"
 
-import { MapPin, Phone, Shield } from "lucide-react"
+import { useState } from "react"
+import { MapPin, Phone, Shield, AlertTriangle } from "lucide-react"
 
 import { cancelAdminBooking, updateAdminBookingStatus } from "@/lib/admin-api"
 import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { humanDateTime, useAdminContext } from "./admin-context"
 
+const STATUS_LABELS: Record<string, string> = {
+  confirmed: "Confirmado",
+  completed: "Completado",
+  no_show: "No se presentó",
+}
+
 export function BookingDetailModal() {
+  const [confirmCancel, setConfirmCancel] = useState(false)
   const {
     token,
     business,
@@ -48,10 +57,11 @@ export function BookingDetailModal() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                {["confirmed", "completed", "no_show"].map((status) => (
+                {(["confirmed", "completed", "no_show"] as const).map((status) => (
                   <button
                     key={status}
                     disabled={busyBookingId === selectedBooking.id}
+                    aria-pressed={selectedBooking.status === status}
                     onClick={async () => {
                       if (!token) return
                       setBusyBookingId(selectedBooking.id)
@@ -65,9 +75,13 @@ export function BookingDetailModal() {
                         setBusyBookingId(null)
                       }
                     }}
-                    className="rounded-full border border-zinc-700 px-3 py-1 text-xs uppercase tracking-[0.16em] text-zinc-200"
+                    className={
+                      selectedBooking.status === status
+                        ? "rounded-full border border-amber-500 bg-amber-500/10 px-3 py-1 text-xs uppercase tracking-[0.16em] text-amber-300"
+                        : "rounded-full border border-zinc-700 px-3 py-1 text-xs uppercase tracking-[0.16em] text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 transition-colors"
+                    }
                   >
-                    {status}
+                    {STATUS_LABELS[status]}
                   </button>
                 ))}
                 <button
@@ -77,33 +91,60 @@ export function BookingDetailModal() {
                     setRescheduleTime(selectedBooking.start_datetime.slice(11, 16))
                     setRescheduleReason("")
                   }}
-                  className="rounded-full border border-zinc-700 px-3 py-1 text-xs uppercase tracking-[0.16em] text-zinc-200"
+                  className="rounded-full border border-zinc-700 px-3 py-1 text-xs uppercase tracking-[0.16em] text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 transition-colors"
                 >
                   Mover
                 </button>
-                <button
-                  onClick={async () => {
-                    if (
-                      !token ||
-                      !window.confirm(`Cancelar turno de ${selectedBooking.customer_name}?`)
-                    )
-                      return
-                    setBusyBookingId(selectedBooking.id)
-                    try {
-                      await cancelAdminBooking(token, selectedBooking.id, "cancelado desde dashboard")
-                      await loadSchedule(token)
-                      setSelectedBooking(null)
-                      flash("success", "Turno cancelado")
-                    } catch (error) {
-                      flash("error", error instanceof Error ? error.message : "No se pudo cancelar")
-                    } finally {
-                      setBusyBookingId(null)
-                    }
-                  }}
-                  className="rounded-full border border-red-500/40 px-3 py-1 text-xs uppercase tracking-[0.16em] text-red-200"
-                >
-                  Cancelar
-                </button>
+                {!confirmCancel ? (
+                  <button
+                    onClick={() => setConfirmCancel(true)}
+                    className="rounded-full border border-red-500/40 px-3 py-1 text-xs uppercase tracking-[0.16em] text-red-300 hover:border-red-500/70 transition-colors"
+                  >
+                    Cancelar turno
+                  </button>
+                ) : (
+                  <div className="w-full mt-2 rounded-2xl border border-red-500/30 bg-red-500/5 p-3 animate-in fade-in duration-200">
+                    <div className="flex items-start gap-2 mb-3">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-red-400 mt-0.5" />
+                      <p className="text-xs text-red-200 leading-5">
+                        ¿Cancelar el turno de <span className="font-semibold">{selectedBooking.customer_name}</span>?
+                        Esta acción no se puede deshacer.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        disabled={busyBookingId === selectedBooking.id}
+                        onClick={async () => {
+                          if (!token) return
+                          setBusyBookingId(selectedBooking.id)
+                          try {
+                            await cancelAdminBooking(token, selectedBooking.id, "cancelado desde dashboard")
+                            await loadSchedule(token)
+                            setSelectedBooking(null)
+                            setConfirmCancel(false)
+                            flash("success", "Turno cancelado")
+                          } catch (error) {
+                            flash("error", error instanceof Error ? error.message : "No se pudo cancelar")
+                          } finally {
+                            setBusyBookingId(null)
+                          }
+                        }}
+                        className="bg-red-500 text-white hover:bg-red-400 text-xs px-3 py-1 h-auto rounded-xl"
+                      >
+                        Sí, cancelar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setConfirmCancel(false)}
+                        className="border-zinc-700 bg-transparent text-zinc-300 text-xs px-3 py-1 h-auto rounded-xl"
+                      >
+                        No, volver
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           ) : (
@@ -134,7 +175,7 @@ export function BookingDetailModal() {
             ) : null}
             <div className="flex items-center gap-3">
               <Shield className="h-4 w-4 text-amber-500" />
-              Mati owner/admin único
+              Matias Damonte
             </div>
           </div>
         </CardContent>

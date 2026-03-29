@@ -6,7 +6,7 @@ import { buildMapEmbedUrl, formatDateValue, nextDays } from "@/components/bookin
 
 export type CustomerForm = { firstName: string; lastName: string; phone: string; email: string; notes: string }
 
-export const steps = ["Barbero y servicio", "Fecha y hora", "Tus datos"]
+export const steps = ["Tu barbero", "Fecha y hora", "Tus datos"]
 
 interface BookingContextValue {
   catalog: PublicCatalog | null
@@ -154,17 +154,17 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   function getContinueHint(): string | null {
     if (canContinue()) return null
     if (step === 0) {
-      if (!selectedStaff) return "Seleccioná un barbero para continuar"
-      if (!selectedService) return "Seleccioná un servicio para continuar"
+      if (!selectedStaff) return "Elegí quién te va a cortar"
+      if (!selectedService) return "Seleccioná el servicio que querés"
     }
     if (step === 1) {
-      if (!date) return "Elegí una fecha para ver horarios"
-      if (!slot) return "Seleccioná un horario disponible"
+      if (!date) return "Elegí una fecha para ver los horarios"
+      if (!slot) return "Seleccioná el horario que más te queda"
     }
     if (step === 2) {
-      if (customer.firstName.trim().length < 2) return "Ingresá tu nombre (mínimo 2 caracteres)"
-      if (customer.lastName.trim().length < 2) return "Ingresá tu apellido"
-      if (customer.phone.trim().replace(/\D/g, "").length < 8) return "Ingresá un teléfono válido"
+      if (customer.firstName.trim().length < 2) return "Ingresá tu nombre para reservar"
+      if (customer.lastName.trim().length < 2) return "Falta tu apellido"
+      if (customer.phone.trim().replace(/\D/g, "").length < 8) return "Ingresá un WhatsApp válido"
     }
     return null
   }

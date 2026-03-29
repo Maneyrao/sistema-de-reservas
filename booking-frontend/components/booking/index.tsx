@@ -212,8 +212,8 @@ function BookingWidgetInner() {
           {step === 0 && (
             <div className="space-y-6">
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <h2 className="font-display text-3xl uppercase leading-none">Elegí tu barbero</h2>
-                <p className="mt-1 text-sm text-zinc-400">Seleccioná profesional y servicio.</p>
+                <h2 className="font-display text-3xl uppercase leading-none">¿Quién te va a cortar?</h2>
+                <p className="mt-1 text-sm text-zinc-400">Elegí tu barbero y el servicio que querés.</p>
               </div>
               <StaffSelector />
               <ServiceSelector />
@@ -223,7 +223,7 @@ function BookingWidgetInner() {
           {step === 1 && (
             <div className="space-y-5">
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <h2 className="font-display text-3xl uppercase leading-none">Fecha y hora</h2>
+                <h2 className="font-display text-3xl uppercase leading-none">¿Cuándo venís?</h2>
                 <p className="mt-1 text-sm text-zinc-400">Disponibilidad en tiempo real.</p>
               </div>
               <DatePicker />
@@ -251,7 +251,7 @@ function BookingWidgetInner() {
                 disabled={!canContinue()}
                 className="flex-1 rounded-2xl bg-amber-500 font-semibold text-zinc-950 transition-all hover:bg-amber-400 hover:shadow-lg hover:shadow-amber-500/25 active:scale-95 disabled:opacity-40"
               >
-                Continuar<ChevronRight className="ml-1 h-4 w-4" />
+                {step === 0 ? "Elegir fecha" : "Mis datos"}<ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             ) : (
               <Button
@@ -260,7 +260,7 @@ function BookingWidgetInner() {
                 disabled={!canContinue() || submitting}
                 className="flex-1 rounded-2xl bg-amber-500 font-semibold text-zinc-950 transition-all hover:bg-amber-400 hover:shadow-lg hover:shadow-amber-500/25 active:scale-95 disabled:opacity-40"
               >
-                {submitting ? "Registrando..." : "Confirmar turno"}
+                {submitting ? "Reservando..." : "Reservar mi silla"}
               </Button>
             )}
           </div>
